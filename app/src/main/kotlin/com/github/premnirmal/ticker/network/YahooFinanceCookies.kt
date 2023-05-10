@@ -9,16 +9,15 @@ import javax.inject.Singleton
 @Singleton
 class YahooFinanceCookies @Inject constructor() : CookieJar {
 
-  private val _cookies = ArrayList<Cookie>()
+  private var _cookies = mutableMapOf<String, Cookie>()
 
   override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-    if (url.toString().equals("https://finance.yahoo.com/", true)) {
-      _cookies.clear()
+    for (cookie in cookies) {
+      _cookies[cookie.name] = cookie
     }
-    _cookies.addAll(cookies)
   }
 
   override fun loadForRequest(url: HttpUrl): List<Cookie> {
-    return _cookies
+    return _cookies.values.toList()
   }
 }

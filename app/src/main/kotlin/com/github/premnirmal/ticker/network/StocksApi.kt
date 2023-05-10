@@ -8,14 +8,19 @@ import com.github.premnirmal.ticker.network.data.Quote
 import com.github.premnirmal.ticker.network.data.QuoteSummary
 import com.github.premnirmal.ticker.network.data.SuggestionsNet.SuggestionNet
 import com.github.premnirmal.ticker.network.data.YahooQuoteNet
+import com.github.premnirmal.ticker.network.data.YahooResponse
 import com.google.gson.Gson
+import com.google.gson.JsonSyntaxException
+import com.google.gson.stream.MalformedJsonException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
+
 
 /**
  * Created by premnirmal on 3/3/16.
@@ -48,6 +53,30 @@ class StocksApi @Inject constructor(
           Timber.e("Failed initial load with code: ${initialLoad.code()}")
           return@withContext
         }
+
+        // Begin: consent to cookies for EU countries
+        val html = initialLoad.body().toString()
+        val url = initialLoad.raw().request.url.toString()
+
+        var pattern = Regex("csrfToken\" value=\"(.+)\">")
+        var match = pattern.find(html)
+        if (!match?.groupValues.isNullOrEmpty()) {
+          val csrfToken = match?.groupValues?.last().toString()
+          val sessionId = url.split("=").last()
+
+          val requestBody = FormBody.Builder()
+            .add("csrfToken", csrfToken)
+            .add("sessionId", sessionId)
+            .addEncoded("originalDoneUrl", "https://finance.yahoo.com/?guccounter=1")
+            .add("namespace", "yahoo")
+            .add("agree", "agree")
+            .add("agree", "agree")
+            .build()
+
+          yahooFinanceInitialLoad.cookieConsent(url, requestBody)
+        }
+        // End: consent to cookies for EU countries
+
         val crumbResponse = yahooFinance.getCrumb()
         if (crumbResponse.isSuccessful) {
           val crumb = crumbResponse.body()
@@ -57,7 +86,7 @@ class StocksApi @Inject constructor(
         } else {
           Timber.e("Failed to get crumb with code: ${crumbResponse.code()}")
         }
-      } catch (e: Exception) {
+      } catch (e: MalformedJsonException) {
         Timber.e(e, "Initial load failed")
       }
     }
@@ -124,12 +153,17 @@ class StocksApi @Inject constructor(
       loadCrumb()
     }
     val query = tickerList.joinToString(",")
-    val quotesResponse = yahooFinance.getStocks(query)
-    if (quotesResponse.code() == 401) {
-      appPreferences.setCrumb(null)
-      loadCrumb()
+    var quotesResponse: retrofit2.Response<YahooResponse>? = null
+    try {
+      quotesResponse = yahooFinance.getStocks(query)
+      if (quotesResponse?.code() == 401) {
+        appPreferences.setCrumb(null)
+        loadCrumb()
+      }
+    } catch (ex: JsonSyntaxException) {
+      print(ex.toString())
     }
-    val quoteNets = quotesResponse.body()?.quoteResponse?.result ?: emptyList()
+    val quoteNets = quotesResponse?.body()?.quoteResponse?.result ?: emptyList()
     quoteNets
   }
 

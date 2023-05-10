@@ -114,6 +114,7 @@ class NetworkModule {
     val retrofit = Retrofit.Builder()
       .client(okHttpClient)
       .baseUrl(context.getString(R.string.yahoo_initial_load_endpoint))
+      .addConverterFactory(PrimitiveConverterFactory.create())
       .build()
     val yahooFinance = retrofit.create(YahooFinanceInitialLoad::class.java)
     return yahooFinance
